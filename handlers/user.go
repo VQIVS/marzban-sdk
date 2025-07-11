@@ -9,6 +9,7 @@ import (
 
 	"github.com/VQIVS/marzban-sdk/internal/client"
 	"github.com/VQIVS/marzban-sdk/internal/models"
+	"github.com/VQIVS/marzban-sdk/utils"
 )
 
 func (mc *MarzbanClient) CreateUser(user models.User) (*models.User, error) {
@@ -118,8 +119,7 @@ func (mc *MarzbanClient) UpdateUser(user models.User) (*models.User, error) {
 func (mc *MarzbanClient) DeleteUserByUsername(username string) error {
 	endpoint := client.GetUserByUsernameEndpoint(username)
 
-	//TODO: Use StringToURL function in utils/common.go
-	fullURL, err := url.Parse(mc.Client.BaseURL + endpoint)
+	fullURL, err := utils.StringToURL(mc.Client.BaseURL + endpoint)
 	if err != nil {
 		return err
 	}
@@ -143,4 +143,72 @@ func (mc *MarzbanClient) DeleteUserByUsername(username string) error {
 		}
 	}
 	return nil
+}
+func (mc *MarzbanClient) GetUserSubURL(username string) (string, error) {
+	endpoint := client.GetUserByUsernameEndpoint(username)
+	fullURL, err := utils.StringToURL(mc.Client.BaseURL + endpoint)
+	if err != nil {
+		return "", err
+	}
+	resp, err := mc.Client.HttpClient.Get(fullURL.String())
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", &models.ErrorResponse{
+			Message: "HTTP " + resp.Status,
+			Detail:  "Failed to get user sub URL, status code: " + resp.Status + ", body: " + string(responseBody),
+		}
+	}
+
+	var response struct {
+		SubURL string `json:"subscription_url"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return "", err
+	}
+	if response.SubURL == "" {
+		return "", &models.ErrorResponse{
+			Message: "No subscription URL found",
+			Detail:  "The user does not have a subscription URL.",
+		}
+	}
+	return response.SubURL, nil
+}
+
+func (mc *MarzbanClient) GetUserInbounds(username string) ([]string, error) {
+	endpoint := client.GetUserByUsernameEndpoint(username)
+	fullURL, err := utils.StringToURL(mc.Client.BaseURL + endpoint)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := mc.Client.HttpClient.Get(fullURL.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &models.ErrorResponse{
+			Message: "HTTP " + resp.Status,
+			Detail:  "Failed to get user inbounds, status code: " + resp.Status + ", body: " + string(responseBody),
+		}
+	}
+
+	var response struct {
+		Inbounds []string `json:"inbounds"`
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return nil, err
+	}
+
+	return response.Inbounds, nil
 }
